@@ -1,46 +1,45 @@
 from dolfin import *
+import krypy
 import numpy as np
 import scipy.sparse as sps
 import matplotlib.pyplot as plt
 
 import dolfin_to_nparrays as dtn
-import linsolv_utils
+import time_int_schemes as tis
 
-import data_output_utils as dou
 
 parameters.linear_algebra_backend = 'uBLAS'
 
-def time_int_params(Nts):
+def time_int_params():
     t0 = 0.0
     tE = 1.0
-    dt = (tE - t0)/Nts
     tip = dict(t0 = t0,
             tE = tE,
-            dt = dt, 
-            Nts = Nts,
-            Residuals = NseResiduals(), 
-            ParaviewOutput = True, 
-            nu = 1e-3,
+            Residuals = NseResiduals(),
+            nu = 1
             )
 
     return tip
 
-def abetterworld(N = 20, Nts = 4):
+def abetterworld(N = 20, Nts = [16, 32, 64, 128]):
 
-    tip = time_int_params(Nts)
+    tip = time_int_params()
     prp = problem_params(N)
-    prp['fv'].om = 1
-    prp['p_sol'].om = 1
-    prp['v_sol'].om = 1
+
+    fv, fp, sol_v, sol_p = prp['fv'], prp['fp'], prp['sol_v'], prp['sol_p']
+
+    # fixing some parameters
+    # fv.om, v_sol.om, p_sol.om = 1, 1, 1
+    # fv.nu, v_sol.nu, p_sol.nu = 1, 1, 1
 
 ###
 ## start with the Stokes problem for initialization
 ###
 
-    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'],
+    stokesmats = dtn.get_stokessysmats(prp['V'], prp['Q'],
                                          tip['nu'])
-    rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
-                            femp['fv'], femp['fp'], t=0)
+    rhsd_vf = dtn.setget_rhs(prp['V'], prp['Q'], 
+                            prp['fv'], prp['fp'], t=0)
 
     # remove the freedom in the pressure 
     stokesmats['J'] = stokesmats['J'][:-1,:][:,:]
@@ -50,14 +49,13 @@ def abetterworld(N = 20, Nts = 4):
     # reduce the matrices by resolving the BCs
     (stokesmatsc, 
             rhsd_stbc, 
-            invinds, 
+            INVINDS, 
             bcinds, 
             bcvals) = dtn.condense_sysmatsbybcs(stokesmats,
-                                                femp['bc0'])
+                                                prp['bc0'])
 
     # casting some parameters 
-    NV, NP = len(femp['invinds']), stokesmats['J']/shape[0]
-    DT, INVINDS = tip['dt'], femp['invinds']
+    NV, NP = len(INVINDS), stokesmats['J'].shape[0]
     M, A, J = stokesmatsc['M'], stokesmatsc['A'], stokesmatsc['J'] 
 
 
@@ -67,31 +65,43 @@ def abetterworld(N = 20, Nts = 4):
 
     inivalvec = np.zeros((NV+NP,1))
 
-    for newtk in range(1, tip['nnewtsteps']+1):
+    for nts in Nts:
+        DT = (1.0*tip['t0'] - tip['tE'])/nts
 
         biga = sps.vstack([
-                    sps.hstack([M+DT*A, J.T])
-                    sps.hstack([J, sps.csr_matrix((Np,Np))])
+                    sps.hstack([M+DT*A, J.T]),
+                    sps.hstack([J, sps.csr_matrix((NP, NP))])
                         ])
 
-        v_old = inivalvec
-        for t in np.arange(tip['t0'], tip['tE'], DT):
+        vp_old = inivalvec
 
-            fvpn = dtn.setget_rhs(femp['V'], femp['Q'], femp['fv'], femp['fp'], t=t)
+        ContiRes, VelEr, PEr = [], [], []
+
+        for tcur in np.linspace(tip['t0']+DT,tip['tE'],nts):
+
+            fvpn = dtn.setget_rhs(prp['V'], prp['Q'], fv, fp, t=tcur)
 
             cur_rhs = np.vstack([fvpn['fv'][INVINDS,:],
                                 np.zeros((NP,1))])
 
-            ret = krypy.linsys.minres(IterA, Iterrhs, 
-                    x0=vp_old, tol=TolCor*TsP.linatol,
-                    M=MInv)
-            vp_old = ret['xk'] 
+            vp_old = krypy.linsys.minres(biga, cur_rhs,
+                    x0=vp_old, maxiter=100)['xk'] 
 
-            v_old = vp[:NV,]
+            vc = vp_old[:NV,]
+            pc = vp_old[NV:,]
 
-        tip['norm_nwtnupd'].append(norm_nwtnupd)
+            v, p = tis.expand_vp_dolfunc(tip, vp=None, vc=vc, pc=pc)
 
-    print tip['norm_nwtnupd']
+            v_sol.t, p_sol.t = tcur
+
+            # the errors  
+            ContiRes.append(tis.comp_cont_error(v,fp,tip['Q']))
+            VelEr.append(errornorm(vCur,v))
+            PEr.append(errornorm(pCur,p))
+
+        tip['Residuals'].ContiRes.append(ContiRes)
+        tip['Residuals'].VelEr.append(VelEr)
+        tip['Residuals'].PEr.append(PEr)
 
 def exact_stokes_sol():
     import sympy as smp
@@ -108,10 +118,11 @@ def exact_stokes_sol():
     # Stokes case
     rhs1 = smp.simplify(diff(u1,t) - nu*(diff(u1,x,x) + diff(u1,y,y)) + diff(p,x))
     rhs2 = smp.simplify(diff(u2,t) - nu*(diff(u2,x,x) + diff(u2,y,y)) + diff(p,y))
+    rhs3 = smp.simplify(diff(u1,x) + diff(u2,y))
 
-    sol_p = Expression(ccode(p))
-    sol_v = Expression((ccode(u1), ccode(u2)))
-    fv = Expression((ccode(rhs1), ccode(rhs2))) 
+    sol_p = Expression(ccode(p), om=1, t=0)
+    sol_v = Expression((ccode(u1), ccode(u2)), om=1, t=0)
+    fv = Expression((ccode(rhs1), ccode(rhs2)), om=1, nu=1, t=0) 
     fp = Expression(ccode(rhs3))
 
     return sol_v, sol_p, fv, fp
@@ -126,9 +137,9 @@ def problem_params(N):
 
     # No-slip boundary condition for velocity
     noslip = Constant((0.0, 0.0))
-    bc0 = DirichletBC(V, noslip, 'on_boundary')
+    bc0 = [DirichletBC(V, noslip, 'on_boundary')]
 
-    sol_v, sol_p, fv, fp = exact_stokes_sol(): 
+    sol_v, sol_p, fv, fp = exact_stokes_sol()
 
     dfems = dict(mesh = mesh,
             V = V,
@@ -150,4 +161,4 @@ class NseResiduals(object):
 
 
 if __name__ == '__main__':
-    abwip()
+    abetterworld()

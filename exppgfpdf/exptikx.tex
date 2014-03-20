@@ -1,0 +1,12 @@
+\documentclass[tikz]{standalone}
+%\usetikzlibrary{...}% tikz package already loaded by 'tikz' option
+\usepackage{pgfplots}
+
+\begin{document}
+\newlength\figureheight
+\newlength\figurewidth
+\setlength\figureheight{3.2cm}
+\setlength\figurewidth{4cm}
+\pgfplotsset{footnotesize}
+{\input{pgfpictoexp.tex}}
+\end{document}

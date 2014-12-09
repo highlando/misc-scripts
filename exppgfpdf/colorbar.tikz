@@ -1,0 +1,49 @@
+% This file was created by matplotlib v0.1.0.
+% Copyright (c) 2010--2014, Nico Schlömer <nico.schloemer@gmail.com>
+% All rights reserved.
+% 
+% The lastest updates can be retrieved from
+% 
+% https://github.com/nschloe/matplotlib2tikz
+% 
+% where you can also submit bug reports and leavecomments.
+% 
+\begin{tikzpicture}
+
+\begin{axis}[
+title={$\apprxerr{33}{8}$},
+xmin=0, xmax=0.0019,
+ymin=0, ymax=0.038,
+axis on top,
+width=\figurewidth,
+height=\figureheight,
+scaled x ticks=false,
+xtick={,,},
+xticklabels={,,},
+xlabel={$\phantom{x_0}$},
+yticklabels={,,},
+extra y ticks={
+    \pgfkeysvalueof{/pgfplots/ymin},
+    \pgfkeysvalueof{/pgfplots/ymax}
+},
+every extra y tick/.style={
+    font=\large,
+    tick style=transparent, 
+    yticklabel pos=right,
+    /pgf/number format/.cd,
+    fixed,
+    precision=3
+},
+]
+\addplot graphics [includegraphics cmd=\pgfimage,xmin=0, xmax=0.0019, ymin=0, ymax=0.038] {img16.png};
+\path [draw=black, fill opacity=0] (axis cs:13,0.038)--(axis cs:13,0.038);
+
+\path [draw=black, fill opacity=0] (axis cs:0.0019,13)--(axis cs:0.0019,13);
+
+\path [draw=black, fill opacity=0] (axis cs:13,0)--(axis cs:13,0);
+
+\path [draw=black, fill opacity=0] (axis cs:0,13)--(axis cs:0,13);
+
+\end{axis}
+
+\end{tikzpicture}

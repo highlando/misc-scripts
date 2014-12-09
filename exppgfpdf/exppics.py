@@ -1,21 +1,33 @@
 import os
 
-tikxlist = [
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxTNoneyyTNone.jsonxcomp.tex",
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxT0.0yyT0.0.jsonxcomp.tex",
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxT0.1yyT0.1.jsonxcomp.tex",
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxTNoneyyTNone.jsonycomp.tex",
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxT0.0yyT0.0.jsonycomp.tex",
-    "NStokesNwtnit4_time1.0_nu0.01_mesh25_Nts40_dt0.025NY4NU4alphau1e-07yxT0.1yyT0.1.jsonycomp.tex"]
+tikxdict = {'colorbar': dict(fh='5cm', fw='2cm'),
+            'domainaxis': dict(fh='5cm', fw='5cm')}
+defstex = 'def'  # add a .tex file with definitions or modify def.tex
 
-outnamelist = ["yxTNoneyyTNonex.pdf",
-               "yxT00yyT00x.pdf",
-               "yxT01yyT01x.pdf",
-               "yxTNoneyyTNoney.pdf",
-               "yxT00yyT00y.pdf",
-               "yxT01yyT01y.pdf"]
+preamblestr = (
+    '\\documentclass[tikz]{standalone}' +
+    '\n%\usetikzlibrary{ tikz package already loaded by "tikz" option' +
+    '\n\\usepackage{pgfplots}' +
+    '\n\\pgfplotsset{compat=newest}' +
+    '\n\\pgfplotsset{plot coordinates/math parser=false}' +
+    '\n\\begin{document}' +
+    '\n\\input{' + defstex + '}' +
+    '\n\\newlength\\figureheight' +
+    '\n\\newlength\\figurewidth'
+    )
 
-for indx in range(len(tikxlist)):
-    os.system("cp " + tikxlist[indx] + " pgfpictoexp.tex")
-    os.system("pdflatex exptikx.tex")
-    os.system("cp exptikx.pdf " + outnamelist[indx])
+for figname, figinfo in tikxdict.items():
+    curstring = (
+        '\n\\setlength\\figureheight{{{0}}}'.format(figinfo['fh']) +
+        '\n\\setlength\\figurewidth{{{0}}}'.format(figinfo['fw']) +
+        '\n\\pgfplotsset{footnotesize}' +
+        '\n{{\\input{{{0}.tikz}}}}'.format(figname) +
+        '\n\\end{document}'
+        )
+    tmptexfile = open('exptikz.tex', 'w')
+    tmptexfile.write(preamblestr + curstring)
+    tmptexfile.close()
+
+    # os.system("cp " + tikxlist[indx] + " pgfpictoexp.tex")
+    os.system("pdflatex -interaction=nonstopmode exptikz.tex")
+    os.system("mv exptikz.pdf " + figname + '.pdf')
